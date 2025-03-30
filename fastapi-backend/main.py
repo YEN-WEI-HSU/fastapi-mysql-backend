@@ -117,5 +117,5 @@ def delete_note(note_id: int):
 
 
 
-#  uvicorn main:app --host 0.0.0.0 --port 8000 啟動伺服器
+#  uvicorn main:app --host 0.0.0.0 --port 8000  #啟動伺服器
 # 瀏覽器開啟 http://localhost:8000/docs
