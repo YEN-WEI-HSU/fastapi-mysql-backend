@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# pipenv
+Pipfile.lock
+
+# VSCode
+.vscode/
+
+# 虛擬環境（如有）
+venv/
+
+.venv/
+
+# dotenv
+.env
+
+# 作業系統快取
+.DS_Store
+Thumbs.db
+
+# Log
+*.log

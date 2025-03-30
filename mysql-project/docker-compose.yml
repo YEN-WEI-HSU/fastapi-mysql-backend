@@ -1,0 +1,39 @@
+#資料庫專案，只負責開 DB + 管理 phpMyAdmincd
+
+version: '3.8'
+services:
+  db:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: test123
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    restart: always
+    environment:
+      PMA_HOST: db
+      PMA_USER: testuser
+      PMA_PASSWORD: test123
+    ports:
+      - "8080:80"
+
+volumes:
+  db-data:
+
+
+#在 mysql-project 裡啟動/管理 Docker 時在terminal輸入
+#cd ~/mysql-project
+#sudo docker compose up -d         # 啟動服務
+#sudo docker compose down          # 停止服務
+#sudo docker ps                    # 查看執行中的容器
+#sudo docker logs mysql            # 查看 mysql 容器的 log
