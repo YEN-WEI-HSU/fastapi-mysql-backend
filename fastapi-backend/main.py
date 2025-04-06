@@ -1,121 +1,105 @@
-#進入pipenv虛擬環境指令: pipenv shell
-
-# main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body, Query
 from db import get_connection
-from schemas import NoteCreate, NoteUpdate, Note
+import uuid
 
 app = FastAPI()
 
-# 測試根目錄
-@app.get("/")
-def read_root():
-    return {"message": "Hello from FastAPI 🎉"}
 
-# 取得所有筆記
+# ✅ [GET] 讀取資料 -------------------------------------------------------------------
 @app.get("/notes")
-def get_notes():
+def read_notes(uuid: str | None = Query(default=None)):
+    """
+    - 不帶 uuid：回傳全部筆記
+    - 帶 uuid：回傳單筆資料
+    """
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, title, content FROM notes")
-    results = cursor.fetchall()
-    cursor.close()
-    conn.close()
 
-    notes = []
-    for row in results:
-        notes.append({"id": row[0], "title": row[1], "content": row[2]})
-    return {"notes": notes}
+    try:
+        if uuid:
+            cursor.execute("SELECT uuid, title, content FROM notes WHERE uuid = %s", (uuid,))
+            result = cursor.fetchone()
+            if not result:
+                raise HTTPException(status_code=404, detail="Note not found")
+            return {
+                "uuid": result[0],
+                "title": result[1],
+                "content": result[2]
+            }
+        else:
+            cursor.execute("SELECT uuid, title, content FROM notes")
+            results = cursor.fetchall()
+            return {
+                "notes": [
+                    {"uuid": row[0], "title": row[1], "content": row[2]}
+                    for row in results
+                ]
+            }
+    finally:
+        cursor.close()
+        conn.close()
 
-# 取得單一筆記
-@app.get("/notes/{note_id}")
-def get_note(note_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, title, content FROM notes WHERE id = %s", (note_id,))
-    result = cursor.fetchone()
-    cursor.close()
-    conn.close()
 
-    if not result:
-        raise HTTPException(status_code=404, detail="Note not found")
-
-    return {"id": result[0], "title": result[1], "content": result[2]}
-
-# 新增筆記
+# ✅ [POST] 建立 / 刪除 / 更新 / 修改資料 ---------------------------------------------
 @app.post("/notes")
-def create_note(note: NoteCreate):
-    conn = get_connection()
-    cursor = conn.cursor()
-    sql = "INSERT INTO notes (title, content) VALUES (%s, %s)"
-    cursor.execute(sql, (note.title, note.content))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return {"message": "Note created successfully"}
+def modify_notes(payload: dict = Body(...)):
+    """
+    根據 payload 中的 action 執行對應 CRUD：
+    - create: 新增
+    - delete: 刪除
+    - update: 整筆更新
+    - patch: 局部更新
+    """
+    action = payload.get("action")
+    data = payload.get("data", {})
 
-# 更新整筆筆記
-@app.put("/notes/{note_id}")
-def update_note(note_id: int, note: NoteCreate):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE notes SET title=%s, content=%s WHERE id=%s", (note.title, note.content, note_id))
-    conn.commit()
-    updated_rows = cursor.rowcount
-    cursor.close()
-    conn.close()
-
-    if updated_rows == 0:
-        raise HTTPException(status_code=404, detail="Note not found")
-    return {"message": "Note updated successfully"}
-
-# 局部更新（例如只更新 title 或 content）
-@app.patch("/notes/{note_id}")
-def patch_note(note_id: int, note: NoteUpdate):
     conn = get_connection()
     cursor = conn.cursor()
 
-    update_fields = []
-    values = []
+    try:
+        if action == "create":
+            note_uuid = str(uuid.uuid4())
+            sql = "INSERT INTO notes (uuid, title, content) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (note_uuid, data.get("title"), data.get("content")))
+            conn.commit()
+            return {"message": "Note created", "uuid": note_uuid}
 
-    if note.title is not None:
-        update_fields.append("title = %s")
-        values.append(note.title)
-    if note.content is not None:
-        update_fields.append("content = %s")
-        values.append(note.content)
+        elif action == "delete":
+            cursor.execute("DELETE FROM notes WHERE uuid = %s", (data.get("uuid"),))
+            conn.commit()
+            return {"message": "Note deleted"}
 
-    if not update_fields:
-        raise HTTPException(status_code=400, detail="No data provided for update")
+        elif action == "update":
+            cursor.execute(
+                "UPDATE notes SET title = %s, content = %s WHERE uuid = %s",
+                (data.get("title"), data.get("content"), data.get("uuid"))
+            )
+            conn.commit()
+            return {"message": "Note updated"}
 
-    values.append(note_id)
-    sql = f"UPDATE notes SET {', '.join(update_fields)} WHERE id = %s"
-    cursor.execute(sql, values)
-    conn.commit()
-    updated_rows = cursor.rowcount
-    cursor.close()
-    conn.close()
+        elif action == "patch":
+            fields = []
+            values = []
 
-    if updated_rows == 0:
-        raise HTTPException(status_code=404, detail="Note not found")
-    return {"message": "Note patched successfully"}
+            if data.get("title"):
+                fields.append("title=%s")
+                values.append(data.get("title"))
+            if data.get("content"):
+                fields.append("content=%s")
+                values.append(data.get("content"))
 
-# 刪除筆記
-@app.delete("/notes/{note_id}")
-def delete_note(note_id: int):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM notes WHERE id = %s", (note_id,))
-    conn.commit()
-    deleted_rows = cursor.rowcount
-    cursor.close()
-    conn.close()
+            if not fields:
+                raise HTTPException(status_code=400, detail="No patch data provided")
 
-    if deleted_rows == 0:
-        raise HTTPException(status_code=404, detail="Note not found")
-    return {"message": "Note deleted successfully"}
+            values.append(data.get("uuid"))
+            sql = f"UPDATE notes SET {', '.join(fields)} WHERE uuid = %s"
+            cursor.execute(sql, values)
+            conn.commit()
+            return {"message": "Note patched"}
 
+        else:
+            raise HTTPException(status_code=400, detail="Invalid action")
 
-
-#  uvicorn main:app --host 0.0.0.0 --port 8000  #啟動伺服器
-# 瀏覽器開啟 http://localhost:8000/docs
+    finally:
+        cursor.close()
+        conn.close()
