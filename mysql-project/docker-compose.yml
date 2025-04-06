@@ -28,7 +28,7 @@ services:
       - "8080:80"
 
 volumes:
-  db-data:
+  db-data:   #docker compose down 不會刪資料，只會刪容器。資料還在！因為有用volumes
 
 
 #在 mysql-project 裡啟動/管理 Docker 時在terminal輸入
