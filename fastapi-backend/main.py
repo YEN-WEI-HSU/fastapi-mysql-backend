@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Body, Query
+from fastapi import FastAPI, HTTPException, Query
 from db import get_connection
 from schemas import NotePayload
 import uuid
@@ -9,10 +9,6 @@ app = FastAPI()
 # ✅ [GET] 讀取資料 -------------------------------------------------------------------
 @app.get("/notes")
 def read_notes(uuid: str | None = Query(default=None)):
-    """
-    - 不帶 uuid：回傳全部筆記
-    - 帶 uuid：回傳單筆資料
-    """
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -41,18 +37,11 @@ def read_notes(uuid: str | None = Query(default=None)):
         conn.close()
 
 
-# ✅ [POST] 建立 / 刪除 / 更新 / 修改資料 ---------------------------------------------
+# ✅ [POST] 根據 action 處理 create / delete / update / patch ------------------------
 @app.post("/notes")
 def modify_notes(payload: NotePayload):
-    """
-    根據 payload 中的 action 執行對應 CRUD：
-    - create: 新增
-    - delete: 刪除
-    - update: 整筆更新
-    - patch: 局部更新
-    """
-    action = payload.get("action")
-    data = payload.get("data", {})
+    action = payload.action
+    data = payload.data
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -61,19 +50,19 @@ def modify_notes(payload: NotePayload):
         if action == "create":
             note_uuid = str(uuid.uuid4())
             sql = "INSERT INTO notes (uuid, title, content) VALUES (%s, %s, %s)"
-            cursor.execute(sql, (note_uuid, data.get("title"), data.get("content")))
+            cursor.execute(sql, (note_uuid, data.title, data.content))
             conn.commit()
             return {"message": "Note created", "uuid": note_uuid}
 
         elif action == "delete":
-            cursor.execute("DELETE FROM notes WHERE uuid = %s", (data.get("uuid"),))
+            cursor.execute("DELETE FROM notes WHERE uuid = %s", (data.uuid,))
             conn.commit()
             return {"message": "Note deleted"}
 
         elif action == "update":
             cursor.execute(
                 "UPDATE notes SET title = %s, content = %s WHERE uuid = %s",
-                (data.get("title"), data.get("content"), data.get("uuid"))
+                (data.title, data.content, data.uuid)
             )
             conn.commit()
             return {"message": "Note updated"}
@@ -82,17 +71,17 @@ def modify_notes(payload: NotePayload):
             fields = []
             values = []
 
-            if data.get("title"):
-                fields.append("title=%s")
-                values.append(data.get("title"))
-            if data.get("content"):
-                fields.append("content=%s")
-                values.append(data.get("content"))
+            if data.title:
+                fields.append("title = %s")
+                values.append(data.title)
+            if data.content:
+                fields.append("content = %s")
+                values.append(data.content)
 
             if not fields:
                 raise HTTPException(status_code=400, detail="No patch data provided")
 
-            values.append(data.get("uuid"))
+            values.append(data.uuid)
             sql = f"UPDATE notes SET {', '.join(fields)} WHERE uuid = %s"
             cursor.execute(sql, values)
             conn.commit()
