@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Body, Query
 from db import get_connection
+from schemas import NotePayload
 import uuid
 
 app = FastAPI()
@@ -42,7 +43,7 @@ def read_notes(uuid: str | None = Query(default=None)):
 
 # ✅ [POST] 建立 / 刪除 / 更新 / 修改資料 ---------------------------------------------
 @app.post("/notes")
-def modify_notes(payload: dict = Body(...)):
+def modify_notes(payload: NotePayload):
     """
     根據 payload 中的 action 執行對應 CRUD：
     - create: 新增
